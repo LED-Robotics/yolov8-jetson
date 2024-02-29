@@ -10,6 +10,9 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_BUILD_TYPE Release)
 option(CUDA_USE_STATIC_CUDA_RUNTIME OFF)
 
+# wpilib
+find_package(wpilib REQUIRED)
+
 # CUDA
 find_package(CUDA REQUIRED)
 message(STATUS "CUDA Libs: \n${CUDA_LIBRARIES}\n")
@@ -53,4 +56,4 @@ add_executable(${PROJECT_NAME}
         )
 
 link_directories(${ALL_LIBS})
-target_link_libraries(${PROJECT_NAME} PRIVATE nvinfer nvinfer_plugin ${CUDA_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE nvinfer nvinfer_plugin ${CUDA_LIBRARIES} ${OpenCV_LIBS} cameraserver ntcore cscore wpiutil)
