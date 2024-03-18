@@ -66,16 +66,31 @@ int main(int argc, char** argv)
     frc::CameraServer::StartAutomaticCapture(intakeSource);
 
     int time = intakeSink.GrabFrameNoTimeout(image);
-    cv::VideoWriter outputVideo{getNewFileName(), cv::VideoWriter::fourcc('M','J','P','G'), 30, {image.size().width, image.size().height}};
-    if(!outputVideo.isOpened()) {
-        std::cout << "Video not opened!\n";
-    } else {
-        std::cout << "Video opened!\n";
-    }
-    // for(int i = 0; i < 150; i++) {
+    cv::VideoWriter outputVideo;
+    outputVideo.release();
+
+    table->PutBoolean("recordState", false);
+
+    int testAccum = 0;
+    bool recordState = false;
+    bool recording = true;
     while(true) {
+        recordState = table->GetBoolean("recordState", false);
+        if(!recording && recordState) {
+            outputVideo.open(getNewFileName(), cv::VideoWriter::fourcc('M','J','P','G'), 30, {image.size().width, image.size().height});
+            if(!outputVideo.isOpened()) {
+                std::cout << "Video not opened!\n";
+            } else {
+                std::cout << "Video opened!\n";
+                recording = true;
+            }
+        } 
+        if(!recordState && recording) {
+            outputVideo.release();
+            recording = false;
+        }
         frameTime = intakeSink.GrabFrameNoTimeout(image);
-        outputVideo.write(image);
+        if(recording) outputVideo << image;
         objs.clear();
         yolov8->copy_from_Mat(image, size);
         yolov8->infer();
@@ -117,9 +132,8 @@ int main(int argc, char** argv)
 
         yolov8->draw_objects(image, res, objs, CLASS_NAMES, COLORS);
         intakeSource.PutFrame(res);
-
+        testAccum++;
     }
-    outputVideo.release();
     delete yolov8;
     return 0;
 }
