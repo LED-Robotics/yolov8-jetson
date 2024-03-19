@@ -34,6 +34,7 @@ std::string getNewFileName() {
 int main(int argc, char** argv)
 {
     int frameTime = 0;
+    int shooterFrameTime = 0;
     double trackedSize = 0.0;
     int trackedIndex = 0;
     double tx = 0.0;
@@ -43,41 +44,51 @@ int main(int argc, char** argv)
     width = 640;
     height = 640;
     cs::VideoMode startingMode{cs::VideoMode::PixelFormat::kMJPEG, width, height, 30};
+    CS_Status status = 0;
+    std::string intakePath = "";
+    std::string shooterPath = "";
+    for (const auto& caminfo : cs::EnumerateUsbCameras(&status)) {
+        // fmt::print("Dev {}: Path {} (Name {})\n", caminfo.dev, caminfo.path, caminfo.name);
+        // fmt::print("vid {}: pid {}\n", caminfo.vendorId, caminfo.productId);
+        if(caminfo.vendorId == 1118) intakePath = caminfo.path;
+        else if(caminfo.vendorId == 3141) shooterPath = caminfo.path;
+    }
     // const std::string engine_file_path{argv[1]};
     // const std::string path{argv[2]};
-
-    cs::UsbCamera intakeCam{"intakeCam", "/dev/video0"};
+    cs::UsbCamera intakeCam{"intakeCam", intakePath};
+    cs::UsbCamera shooterCam{"shooterCam", shooterPath};
     intakeCam.SetVideoMode(startingMode);
+    shooterCam.SetVideoMode(startingMode);
     auto inst = nt::NetworkTableInstance::GetDefault();
     inst.SetServerTeam(6722);
     inst.StartClient4("jetson-client");
     auto table = inst.GetTable("/jetson");
     cs::CvSink intakeSink{frc::CameraServer::GetVideo(intakeCam)};
+    cs::CvSink shooterSink{frc::CameraServer::GetVideo(shooterCam)};
     assert(argc == 3);
 
     auto yolov8 = new YOLOv8("best.engine");
     yolov8->make_pipe(true);
 
-    cv::Mat             res, image;
+    cv::Mat             res, image, shooterImage;
     cv::Size            size = cv::Size{width, height};
     std::vector<Object> objs;
 
     cs::CvSource intakeSource{"intakeRes", startingMode};
     frc::CameraServer::StartAutomaticCapture(intakeSource);
 
-    int time = intakeSink.GrabFrameNoTimeout(image);
+    int time = shooterSink.GrabFrameNoTimeout(image);
     cv::VideoWriter outputVideo;
     outputVideo.release();
 
     table->PutBoolean("recordState", false);
 
-    int testAccum = 0;
     bool recordState = false;
     bool recording = true;
     while(true) {
         recordState = table->GetBoolean("recordState", false);
         if(!recording && recordState) {
-            outputVideo.open(getNewFileName(), cv::VideoWriter::fourcc('M','J','P','G'), 30, {image.size().width, image.size().height});
+            outputVideo.open(getNewFileName(), cv::VideoWriter::fourcc('M','J','P','G'), 30, {shooterImage.size().width, shooterImage.size().height});
             if(!outputVideo.isOpened()) {
                 std::cout << "Video not opened!\n";
             } else {
@@ -90,7 +101,8 @@ int main(int argc, char** argv)
             recording = false;
         }
         frameTime = intakeSink.GrabFrameNoTimeout(image);
-        if(recording) outputVideo << image;
+        shooterFrameTime = shooterSink.GrabFrameNoTimeout(shooterImage);
+        if(recording) outputVideo << shooterImage;
         objs.clear();
         yolov8->copy_from_Mat(image, size);
         yolov8->infer();
@@ -132,7 +144,6 @@ int main(int argc, char** argv)
 
         yolov8->draw_objects(image, res, objs, CLASS_NAMES, COLORS);
         intakeSource.PutFrame(res);
-        testAccum++;
     }
     delete yolov8;
     return 0;
